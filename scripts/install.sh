@@ -141,9 +141,9 @@ download_binaries() {
         rm -rf "$TMP_DIR"
         exit 1
     fi
-    
-    # Проверка ELF заголовка через head и od
-    ELF_MAGIC=$(head -c 4 "$TMP_DIR/routeguard" | od -A n -t x1 | tr -d ' \n')
+
+    # Проверка ELF заголовка через head и hexdump (совместимо с BusyBox)
+    ELF_MAGIC=$(head -c 4 "$TMP_DIR/routeguard" | hexdump -v -n 4 -e '1/1 "%02x"')
     if [ "$ELF_MAGIC" != "7f454c46" ]; then
         log_error "Загружен не ELF файл! Возможна атака."
         log_error "Magic bytes: $ELF_MAGIC (ожидалось 7f454c46)"
