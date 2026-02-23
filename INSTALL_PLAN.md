@@ -61,8 +61,8 @@ git --version   # ожидается: git version 2+
 
 ```powershell
 # Клонируйте репозиторий
-git clone https://github.com/username/routeguard.git
-cd routeguard
+git clone https://github.com/alexandr-kuz/RouteGuard.git
+cd RouteGuard
 ```
 
 ---
@@ -666,7 +666,7 @@ reboot
 | Ресурс | Ссылка |
 |--------|--------|
 | README | [README.md](README.md) |
-| GitHub Issues | https://github.com/username/routeguard/issues |
+| GitHub Issues | https://github.com/alexandr-kuz/RouteGuard/issues |
 | Keenetic KB | https://kb.keenetic.ru/ |
 | Entware | https://github.com/Entware/Entware |
 | sing-box | https://sing-box.sagernet.org/ |

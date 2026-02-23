@@ -17,7 +17,7 @@
 ### Способ 1: curl | sh (рекомендуется)
 
 ```bash
-curl -sL https://github.com/username/routeguard/releases/latest/download/install.sh | sh
+curl -sL https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/install.sh | sh
 ```
 
 **Что делает скрипт:**
@@ -37,11 +37,11 @@ curl -sL https://github.com/username/routeguard/releases/latest/download/install
 opkg update
 
 # Загрузка и установка
-wget https://github.com/username/routeguard/releases/latest/download/routeguard.ipk
+wget https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/routeguard.ipk
 opkg install routeguard.ipk
 
 # Или напрямую из URL
-opkg install https://github.com/username/routeguard/releases/latest/download/routeguard.ipk
+opkg install https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/routeguard.ipk
 ```
 
 ---
@@ -209,7 +209,7 @@ routeguard update
 
 ```bash
 # Через install.sh с версией
-RG_VERSION=v0.2.0 curl -sL https://github.com/username/routeguard/releases/download/v0.2.0/install.sh | sh
+RG_VERSION=v0.2.0 curl -sL https://github.com/alexandr-kuz/RouteGuard/releases/download/v0.2.0/install.sh | sh
 ```
 
 ### Автообновления (опционально)
@@ -233,7 +233,7 @@ RG_VERSION=v0.2.0 curl -sL https://github.com/username/routeguard/releases/downl
 ### Через uninstall скрипт
 
 ```bash
-curl -sL https://github.com/username/routeguard/releases/latest/download/uninstall.sh | sh
+curl -sL https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/uninstall.sh | sh
 ```
 
 ### Вручную
@@ -311,8 +311,8 @@ rm /opt/etc/routeguard/config.json
 ## 📞 Поддержка
 
 - 📖 [Документация](../README.md)
-- 🐛 [Сообщить об ошибке](https://github.com/username/routeguard/issues)
-- 💡 [Обсуждение](https://github.com/username/routeguard/discussions)
+- 🐛 [Сообщить об ошибке](https://github.com/alexandr-kuz/RouteGuard/issues)
+- 💡 [Обсуждение](https://github.com/alexandr-kuz/RouteGuard/discussions)
 
 ---
 

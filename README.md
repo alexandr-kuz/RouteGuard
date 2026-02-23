@@ -34,15 +34,39 @@ RouteGuard — это модульная VPN-платформа для роут�
 
 ### Установка
 
+#### Шаг 1: Обновление пакетов
+
 ```bash
-curl -sL https://github.com/username/routeguard/releases/latest/download/install.sh | sh
+opkg update
+```
+
+#### Шаг 2: Установка curl (если не установлен)
+
+```bash
+opkg install curl
+```
+
+Или через wget:
+```bash
+opkg install wget
+```
+
+#### Шаг 3: Установка RouteGuard
+
+```bash
+curl -sL https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/install.sh | sh
+```
+
+Или через wget:
+```bash
+wget -qO- https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/install.sh | sh
 ```
 
 ### Через OPKG
 
 ```bash
 opkg update
-opkg install https://github.com/username/routeguard/releases/latest/download/routeguard.ipk
+opkg install https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/routeguard.ipk
 ```
 
 ### После установки
@@ -220,8 +244,8 @@ routeguard logs --follow
 ## 🤝 Поддержка
 
 - 📖 [Документация](docs/)
-- 🐛 [Сообщить об ошибке](https://github.com/username/routeguard/issues)
-- 💡 [Идеи и предложения](https://github.com/username/routeguard/discussions)
+- 🐛 [Сообщить об ошибке](https://github.com/alexandr-kuz/RouteGuard/issues)
+- 💡 [Идеи и предложения](https://github.com/alexandr-kuz/RouteGuard/discussions)
 
 ---
 

@@ -1,8 +1,8 @@
 #!/bin/sh
 # RouteGuard Installer
-# Установка: curl -sL https://github.com/username/routeguard/releases/latest/download/install.sh | sh
+# Установка: curl -sL https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/install.sh | sh
 #
-# Документация: https://github.com/username/routeguard
+# Документация: https://github.com/alexandr-kuz/RouteGuard
 
 set -e
 
