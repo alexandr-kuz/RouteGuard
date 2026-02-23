@@ -1,0 +1,55 @@
+{
+    "version": "0.1.0",
+    "installed_at": "2026-02-23T21:30:00Z",
+    "api": {
+        "host": "0.0.0.0",
+        "port": 8080,
+        "token": "test-token-change-in-production-abc123xyz789",
+        "cors": true,
+        "allowed_origins": ["*"]
+    },
+    "vpn": {
+        "enabled": true,
+        "core": "sing-box",
+        "config_dir": "/opt/etc/routeguard/profiles",
+        "auto_connect": false
+    },
+    "routing": {
+        "enabled": true,
+        "mode": "domain",
+        "default_route": "direct",
+        "rulesets_dir": "/opt/etc/routeguard/rulesets"
+    },
+    "dns": {
+        "enabled": true,
+        "port": 53,
+        "upstream": "tls://1.1.1.1",
+        "bootstrap": "1.1.1.1",
+        "cache_ttl": 300,
+        "adblock": {
+            "enabled": false,
+            "lists": []
+        }
+    },
+    "dpi": {
+        "enabled": false,
+        "mode": "auto",
+        "bypass_domains": []
+    },
+    "logging": {
+        "level": "info",
+        "file": "/opt/var/log/routeguard/routeguard.log",
+        "max_size_mb": 10,
+        "max_backups": 3
+    },
+    "update": {
+        "auto_check": false,
+        "check_interval": "24h",
+        "auto_install": false,
+        "install_window": "03:00-05:00"
+    },
+    "security": {
+        "rate_limit": 100,
+        "session_timeout": "24h"
+    }
+}

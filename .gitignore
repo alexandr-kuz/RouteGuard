@@ -1,0 +1,89 @@
+# Go
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+routeguard
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# Go build cache
+.cache/
+
+# Output of the go coverage tool
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vue/Vite
+dist/
+dist-ssr/
+*.local
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing
+coverage/
+*.cover
+
+# Build artifacts
+*.tar.gz
+*.ipk
+*.deb
+*.rpm
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Certificates
+*.pem
+*.key
+*.crt
+certs/
+
+# Config with secrets
+*.local.json
+.local.env
+.env.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Misc
+.cache/
+__pycache__/

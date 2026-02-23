@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563F4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1E40AF;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10B814;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Щит -->
+  <path d="M50 5 L85 20 L85 50 Q85 80 50 95 Q15 80 15 50 L15 20 Z" 
+        fill="url(#shieldGradient)" 
+        stroke="#1E3A8A" 
+        stroke-width="2"
+        stroke-linejoin="round"/>
+  
+  <!-- Внутренняя тень щита -->
+  <path d="M50 12 L78 24 L78 48 Q78 75 50 88 Q22 75 22 48 L22 24 Z" 
+        fill="none" 
+        stroke="#3B82F6" 
+        stroke-width="1"
+        opacity="0.5"/>
+  
+  <!-- Маршрут/путь внутри -->
+  <path d="M32 62 L42 52 L52 42 L62 32" 
+        stroke="url(#routeGradient)" 
+        stroke-width="5" 
+        fill="none" 
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+  
+  <!-- Точки маршрута -->
+  <circle cx="32" cy="62" r="3" fill="#10B814"/>
+  <circle cx="52" cy="42" r="3" fill="#10B814"/>
+  <circle cx="62" cy="32" r="4" fill="#10B814"/>
+  
+  <!-- Стрелка направления -->
+  <path d="M58 36 L62 32 L56 28" 
+        stroke="#10B814" 
+        stroke-width="2" 
+        fill="none"
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+  
+  <!-- Блик на щите -->
+  <path d="M25 25 L35 20 L35 30 Z" 
+        fill="#60A5FA" 
+        opacity="0.4"/>
+</svg>
