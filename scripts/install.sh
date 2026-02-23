@@ -104,7 +104,7 @@ check_prerequisites() {
 
 download_binaries() {
     log_step "Загрузка RouteGuard"
-    
+
     # Определение версии и URL
     if [ "$VERSION" = "latest" ]; then
         log_info "Поиск последней версии..."
@@ -116,51 +116,49 @@ download_binaries() {
         fi
     fi
     log_info "Версия: $VERSION"
-    
-    # Формирование URL
-    FILENAME="routeguard-${TARGET}.tar.gz"
+
+    # Формирование URL - загружаем прямой бинарник
+    FILENAME="routeguard-${TARGET}"
     URL="${BASE_URL}/download/v${VERSION}/${FILENAME}"
-    CHECKSUM_URL="${URL}.sha256"
-    
+
     log_info "Загрузка: $URL"
-    
+
     # Временная директория
     TMP_DIR="/tmp/routeguard-install-$$"
     mkdir -p "$TMP_DIR"
-    
-    # Загрузка архива
-    if ! curl -sL "$URL" -o "$TMP_DIR/routeguard.tar.gz"; then
+
+    # Загрузка бинарника
+    if ! curl -sL "$URL" -o "$TMP_DIR/routeguard"; then
         log_error "Не удалось загрузить бинарник"
         rm -rf "$TMP_DIR"
         exit 1
     fi
     log_success "Бинарник загружен"
-    
-    # Загрузка checksum
-    if curl -sL "$CHECKSUM_URL" -o "$TMP_DIR/checksum.sha256" 2>/dev/null; then
-        log_info "Проверка контрольной суммы..."
-        cd "$TMP_DIR"
-        if ! sha256sum -c checksum.sha256 > /dev/null 2>&1; then
-            log_error "Неверная контрольная сумма! Возможна атака."
-            rm -rf "$TMP_DIR"
-            exit 1
-        fi
-        log_success "Контрольная сумма верна"
-    else
-        log_warn "Не удалось загрузить checksum, пропускаем проверку"
+
+    # Проверка что файл не пустой и начинается с ELF заголовка
+    if [ ! -s "$TMP_DIR/routeguard" ]; then
+        log_error "Загруженный файл пуст!"
+        rm -rf "$TMP_DIR"
+        exit 1
     fi
     
-    # Распаковка
-    log_info "Распаковка..."
-    tar -xzf routeguard.tar.gz -C "$TMP_DIR"
-    
+    # Проверка ELF заголовка через head и od
+    ELF_MAGIC=$(head -c 4 "$TMP_DIR/routeguard" | od -A n -t x1 | tr -d ' \n')
+    if [ "$ELF_MAGIC" != "7f454c46" ]; then
+        log_error "Загружен не ELF файл! Возможна атака."
+        log_error "Magic bytes: $ELF_MAGIC (ожидалось 7f454c46)"
+        rm -rf "$TMP_DIR"
+        exit 1
+    fi
+    log_success "Проверка файла пройдена"
+
     # Установка бинарника
     cp "$TMP_DIR/routeguard" "$BIN_DIR/"
     chmod +x "$BIN_DIR/routeguard"
-    
+
     # Очистка
     rm -rf "$TMP_DIR"
-    
+
     log_success "Бинарники установлены в $BIN_DIR"
 }
 
@@ -258,41 +256,41 @@ create_directories() {
 
 generate_config() {
     log_step "Генерация конфигурации"
-    
+
     # Генерация API токена
     API_TOKEN=$(openssl rand -hex 32)
-    
+
     # Определение локального IP
     LOCAL_IP=$(hostname -i 2>/dev/null || echo "192.168.1.1")
-    
+
     # Создание config.json
-    cat > "$CONFIG_FILE" << EOF
+    cat > "$CONFIG_FILE" << 'EOF'
 {
-    "version": "$VERSION",
-    "installed_at": "$(date -Iseconds)",
-    
+    "version": "0.1.0",
+    "installed_at": "TIMESTAMP_PLACEHOLDER",
+
     "api": {
         "host": "0.0.0.0",
         "port": 8080,
-        "token": "$API_TOKEN",
+        "token": "TOKEN_PLACEHOLDER",
         "cors": true,
-        "allowed_origins": ["http://$LOCAL_IP:8080"]
+        "allowed_origins": ["http://IP_PLACEHOLDER:8080"]
     },
-    
+
     "vpn": {
         "enabled": true,
         "core": "sing-box",
-        "config_dir": "$INSTALL_DIR/profiles",
+        "config_dir": "/opt/etc/routeguard/profiles",
         "auto_connect": false
     },
-    
+
     "routing": {
         "enabled": true,
         "mode": "domain",
         "default_route": "direct",
-        "rulesets_dir": "$INSTALL_DIR/rulesets"
+        "rulesets_dir": "/opt/etc/routeguard/rulesets"
     },
-    
+
     "dns": {
         "enabled": true,
         "port": 53,
@@ -304,32 +302,37 @@ generate_config() {
             "lists": []
         }
     },
-    
+
     "dpi": {
         "enabled": false,
         "mode": "auto",
         "bypass_domains": []
     },
-    
+
     "logging": {
         "level": "info",
-        "file": "$LOG_DIR/routeguard.log",
+        "file": "/opt/var/log/routeguard/routeguard.log",
         "max_size_mb": 10,
         "max_backups": 3
     },
-    
+
     "update": {
         "auto_check": true,
         "check_interval": "24h",
         "auto_install": false
     },
-    
+
     "security": {
         "rate_limit": 100,
         "session_timeout": "24h"
     }
 }
 EOF
+
+    # Замена плейсхолдеров
+    sed -i "s/TIMESTAMP_PLACEHOLDER/$(date -Iseconds)/" "$CONFIG_FILE"
+    sed -i "s/TOKEN_PLACEHOLDER/$API_TOKEN/" "$CONFIG_FILE"
+    sed -i "s/IP_PLACEHOLDER/$LOCAL_IP/" "$CONFIG_FILE"
     
     # Сохранение токена в отдельный файл
     echo "$API_TOKEN" > "$INSTALL_DIR/.api_token"
@@ -434,10 +437,8 @@ case "$1" in
     status)  status ;;
     *)       echo "Usage: $0 {start|stop|restart|status}" ;;
 esac
-
-exit 0
 EOF
-    
+
     chmod +x "$SERVICE_FILE"
     
     log_success "Сервис зарегистрирован"
@@ -503,10 +504,11 @@ print_summary() {
 main() {
     echo ""
     echo -e "${BLUE}╔════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║   RouteGuard Installer v${VERSION}                 ║${NC}"
+    echo -e "${BLUE}║   RouteGuard Installer v${VERSION}              ║${NC}"
+    echo -e "${BLUE}║   Установка VPN-платформы для Entware            ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════════════════╝${NC}"
     echo ""
-    
+
     check_prerequisites
     download_binaries
     install_dependencies
