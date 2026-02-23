@@ -11,7 +11,7 @@ set -e
 # =============================================================================
 
 VERSION="${RG_VERSION:-latest}"
-REPO="${RG_REPO:-username/routeguard}"
+REPO="${RG_REPO:-alexandr-kuz/RouteGuard}"
 BASE_URL="https://github.com/${REPO}/releases"
 
 # Пути установки

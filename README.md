@@ -72,9 +72,9 @@ opkg install https://github.com/alexandr-kuz/RouteGuard/releases/latest/download
 ### После установки
 
 ```
-╔════════════════════════════════════════════════════╗
-║   RouteGuard успешно установлен!                  ║
-╚════════════════════════════════════════════════════╝
+╔════════════════════════════════════╗
+║   RouteGuard успешно установлен!   ║
+╚════════════════════════════════════╝
 
   Web UI:  http://192.168.1.1:8080
   Токен:   your-api-token-here
@@ -262,6 +262,21 @@ MIT License — см. [LICENSE](LICENSE)
 - [ByeDPI](https://github.com/ValdikSS/ByeDPI) — обход DPI
 - [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome) — DNS и блокировка
 
+---
+
+## 🗑️ Удаление
+
+```bash
+curl -sL https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/uninstall.sh | sh
+```
+
+Или вручную:
+```bash
+/opt/etc/init.d/S50rguard stop && \
+rm -f /opt/bin/routeguard /opt/etc/init.d/S50rguard && \
+rm -rf /opt/etc/routeguard /opt/var/log/routeguard /opt/var/lib/routeguard && \
+opkg remove sing-box smartdns byedpi
+```
 ---
 
 **RouteGuard** © 2024. Сделано с ❤️ для свободного интернета.
