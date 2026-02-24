@@ -211,7 +211,8 @@ function Create-GitHubRelease {
 curl -sL https://github.com/$Repo/releases/download/$tag/install.sh | sh
 ``````
 "@
-        prerelease = $IsPreRelease
+        draft = $false
+        prerelease = $IsPreRelease.IsPresent
     } | ConvertTo-Json -Depth 10
     
     Log-Info "Creating release $tag..."
