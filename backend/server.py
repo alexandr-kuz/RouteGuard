@@ -320,6 +320,8 @@ def main():
 
     # Порт из переменной окружения или конфига
     port = int(os.environ.get('RG_PORT', config.get('api', {}).get('port', DEFAULT_PORT)))
+    if not isinstance(port, int):
+        port = int(port)
     host = config.get('api', {}).get('host', '0.0.0.0')
 
     logger.info(f'Слушаю {host}:{port}')

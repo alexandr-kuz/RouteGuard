@@ -39,9 +39,9 @@ LOGFILE="/opt/var/log/routeguard/routeguard.log"
 
 # Порт из конфига или переменной окружения
 if [ -f "$CONFIG" ]; then
-    PORT=$(python3 -c "import json; print(json.load(open('$CONFIG')).get('api',{}).get('port',8081))" 2>/dev/null || echo "${RG_PORT:-8081}")
+    PORT=$(python3 -c "import json; print(json.load(open('$CONFIG')).get('api',{}).get('port',5000))" 2>/dev/null || echo "${RG_PORT:-5000}")
 else
-    PORT=${RG_PORT:-8081}
+    PORT=${RG_PORT:-5000}
 fi
 
 case "$1" in
@@ -89,8 +89,8 @@ if [ ! -f "$INSTALL_DIR/config.json" ]; then
     TOKEN=$(python3 -c "import secrets; print(secrets.token_hex(32))")
     IP=$(hostname -i 2>/dev/null || echo "192.168.1.1")
     
-    # Порт по умолчанию 8081 (80 занят веб-интерфейсом роутера)
-    PORT=8081
+    # Порт по умолчанию 5000 (свободен на Keenetic)
+    PORT=5000
     
     cat > "$INSTALL_DIR/config.json" << EOF
 {
@@ -121,16 +121,12 @@ sleep 2
 
 # Summary
 TOKEN=$(cat "$INSTALL_DIR/.api_token" 2>/dev/null || echo "unknown")
-PORT=$(cat "$INSTALL_DIR/.port" 2>/dev/null || echo "8081")
+PORT=$(cat "$INSTALL_DIR/.port" 2>/dev/null || echo "5000")
 IP=$(hostname -i 2>/dev/null || echo "192.168.1.1")
 
 # Формирование URL
-if [ "$PORT" = "80" ] || [ "$PORT" = "8081" ]; then
-    if [ "$PORT" = "8081" ]; then
-        URL="http://$IP:8081/"
-    else
-        URL="http://$IP/"
-    fi
+if [ "$PORT" = "80" ]; then
+    URL="http://$IP/"
 else
     URL="http://$IP:$PORT/"
 fi
