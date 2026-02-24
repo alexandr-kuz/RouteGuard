@@ -74,35 +74,49 @@ class RouteGuardHandler(BaseHTTPRequestHandler):
         """Обработка GET запросов"""
         parsed = urlparse(self.path)
         path = parsed.path
-        
+
         # Публичные эндпоинты
         if path == '/api/health':
             self.send_json({'status': 'ok', 'version': '0.2.1'})
             return
-        
+
         if path == '/api/status':
             if not self.check_auth():
                 self.send_error_json('Unauthorized', 401)
                 return
             self.send_json(self.get_status())
             return
-        
+
         if path == '/api/config':
             if not self.check_auth():
                 self.send_error_json('Unauthorized', 401)
                 return
             self.send_json({'config': self.config})
             return
-        
-        # Web UI
+
+        # Web UI - главный файл
         if path == '/' or path == '/index.html':
-            self.serve_frontend('index.html')
+            self.serve_file('frontend/index.html', 'text/html; charset=utf-8')
             return
-        
+
+        # Статические файлы
         if path.startswith('/assets/'):
-            self.serve_frontend(path[1:])
+            filename = path[1:].replace('\\', '/')  # assets/...
+            ext = path.split('.')[-1] if '.' in path else ''
+            content_type = {
+                'js': 'application/javascript',
+                'css': 'text/css',
+                'map': 'application/json',
+                'json': 'application/json'
+            }.get(ext, 'application/octet-stream')
+            self.serve_file(filename, content_type)
             return
-        
+
+        # Favicon
+        if path == '/favicon.ico':
+            self.send_error_json('Not Found', 404)
+            return
+
         self.send_error_json('Not Found', 404)
     
     def do_POST(self):
@@ -258,15 +272,13 @@ class RouteGuardHandler(BaseHTTPRequestHandler):
             logger.error(f'Routing error: {e}')
         return False
     
-    def serve_frontend(self, path):
-        """Отдать файлы фронтенда"""
-        frontend_dir = '/opt/etc/routeguard/frontend'
-        # Исправляем пути для Windows-слэшей
-        path = path.replace('\\', '/')
-        file_path = os.path.join(frontend_dir, *path.split('/'))
+    def serve_file(self, path, content_type):
+        """Отдать файл с правильным Content-Type"""
+        base_dir = '/opt/etc/routeguard'
+        file_path = os.path.join(base_dir, *path.split('/'))
         
         if not os.path.exists(file_path):
-            logger.warning(f'Frontend file not found: {file_path}')
+            logger.warning(f'File not found: {file_path}')
             self.send_error_json('Not Found', 404)
             return
         
@@ -275,24 +287,18 @@ class RouteGuardHandler(BaseHTTPRequestHandler):
                 content = f.read()
             
             self.send_response(200)
-            
-            if path.endswith('.html'):
-                self.send_header('Content-Type', 'text/html; charset=utf-8')
-            elif path.endswith('.css'):
-                self.send_header('Content-Type', 'text/css')
-            elif path.endswith('.js'):
-                self.send_header('Content-Type', 'application/javascript')
-            elif path.endswith('.json'):
-                self.send_header('Content-Type', 'application/json')
-            else:
-                self.send_header('Content-Type', 'application/octet-stream')
-            
+            self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', len(content))
+            self.send_header('Cache-Control', 'public, max-age=3600')
             self.end_headers()
             self.wfile.write(content)
         except Exception as e:
-            logger.error(f'Frontend serve error: {e}')
+            logger.error(f'File serve error: {e}')
             self.send_error_json('Error loading file', 500)
+
+    def serve_frontend(self, path):
+        """Отдать файлы фронтенда (устаревшее)"""
+        self.serve_file(f'frontend/{path}', 'text/html; charset=utf-8')
 
 
 def load_config():
@@ -311,10 +317,11 @@ def main():
     config = load_config()
     RouteGuardHandler.api_token = config.get('api', {}).get('token', '')
     RouteGuardHandler.config = config
-    
-    port = config.get('api', {}).get('port', DEFAULT_PORT)
+
+    # Порт из переменной окружения или конфига
+    port = int(os.environ.get('RG_PORT', config.get('api', {}).get('port', DEFAULT_PORT)))
     host = config.get('api', {}).get('host', '0.0.0.0')
-    
+
     logger.info(f'Слушаю {host}:{port}')
     
     # Запуск сервера

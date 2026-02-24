@@ -1,18 +1,23 @@
 #!/bin/sh
 # RouteGuard Quick Install Script
-# One-line install: curl -sL https://raw.githubusercontent.com/alexandr-kuz/RouteGuard/main/scripts/quick-install.sh | sh
+# One-line install: curl -sL https://github.com/alexandr-kuz/RouteGuard/releases/download/v0.2.1/quick-install.sh | sh
 
 REPO="alexandr-kuz/RouteGuard"
 VERSION="0.2.1"
 INSTALL_DIR="/opt/etc/routeguard"
+LOG_DIR="/opt/var/log/routeguard"
 
 echo "=== RouteGuard Installer ==="
 
 # Stop existing
 killall python3 2>/dev/null
 
-# Create dirs
+# Полная очистка и создание директорий
+rm -rf "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/frontend"
+mkdir -p "$INSTALL_DIR/profiles"
+mkdir -p "$INSTALL_DIR/rulesets"
+mkdir -p "$LOG_DIR"
 
 # Download Python server
 echo "Downloading server..."
@@ -29,9 +34,11 @@ rm -f /tmp/f.zip
 # Create launcher script
 cat > "/opt/bin/routeguard" << 'LAUNCHER'
 #!/bin/sh
+PORT=${RG_PORT:-8080}
 case "$1" in
     start)
-        nohup python3 /opt/etc/routeguard/server.py > /opt/var/log/routeguard/routeguard.log 2>&1 &
+        echo "Starting RouteGuard on port $PORT..."
+        RG_PORT=$PORT nohup python3 /opt/etc/routeguard/server.py > /opt/var/log/routeguard/routeguard.log 2>&1 &
         echo "Started (PID: $!)"
         ;;
     stop)
