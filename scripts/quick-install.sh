@@ -34,7 +34,14 @@ rm -f /tmp/f.zip
 # Create launcher script
 cat > "/opt/bin/routeguard" << 'LAUNCHER'
 #!/bin/sh
-PORT=${RG_PORT:-8080}
+CONFIG="/opt/etc/routeguard/config.json"
+# Порт из конфига или переменной окружения
+if [ -f "$CONFIG" ]; then
+    PORT=$(python3 -c "import json; print(json.load(open('$CONFIG')).get('api',{}).get('port',8080))" 2>/dev/null || echo "${RG_PORT:-8080}")
+else
+    PORT=${RG_PORT:-8080}
+fi
+
 case "$1" in
     start)
         echo "Starting RouteGuard on port $PORT..."
@@ -61,12 +68,21 @@ chmod +x "/opt/bin/routeguard"
 if [ ! -f "$INSTALL_DIR/config.json" ]; then
     TOKEN=$(python3 -c "import secrets; print(secrets.token_hex(32))")
     IP=$(hostname -i 2>/dev/null || echo "192.168.1.1")
+    
+    # Проверка порта 8080 - если занят, использовать 80
+    if netstat -tlnp 2>/dev/null | grep -q ":8080 "; then
+        PORT=80
+        echo "[INFO] Port 8080 busy, using port 80"
+    else
+        PORT=8080
+    fi
+    
     cat > "$INSTALL_DIR/config.json" << EOF
 {
     "version": "$VERSION",
     "api": {
         "host": "0.0.0.0",
-        "port": 8080,
+        "port": $PORT,
         "token": "$TOKEN",
         "cors": true
     },
@@ -74,11 +90,12 @@ if [ ! -f "$INSTALL_DIR/config.json" ]; then
     "routing": {"enabled": true, "mode": "domain"},
     "dns": {"enabled": true, "port": 53, "upstream": "tls://1.1.1.1"},
     "dpi": {"enabled": false},
-    "logging": {"level": "info", "file": "/opt/var/log/routeguard/routeguard.log"}
+    "logging": {"level": "info", "file": "$LOG_DIR/routeguard.log"}
 }
 EOF
     echo "$TOKEN" > "$INSTALL_DIR/.api_token"
     chmod 600 "$INSTALL_DIR/.api_token"
+    echo "$PORT" > "$INSTALL_DIR/.port"
 fi
 
 # Start service
@@ -89,11 +106,19 @@ sleep 2
 
 # Summary
 TOKEN=$(cat "$INSTALL_DIR/.api_token" 2>/dev/null || echo "unknown")
+PORT=$(cat "$INSTALL_DIR/.port" 2>/dev/null || echo "8080")
 IP=$(hostname -i 2>/dev/null || echo "192.168.1.1")
+
+# Формирование URL
+if [ "$PORT" = "80" ]; then
+    URL="http://$IP/"
+else
+    URL="http://$IP:$PORT/"
+fi
 
 echo ""
 echo "=== RouteGuard Ready ==="
-echo "Web UI: http://$IP:8080"
-echo "Token:  $TOKEN"
-echo "Manage: routeguard start|stop|status"
+echo "Web UI:  $URL"
+echo "Token:   $TOKEN"
+echo "Manage:  routeguard start|stop|status"
 echo ""
