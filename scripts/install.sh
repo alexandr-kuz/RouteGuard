@@ -405,7 +405,7 @@ EOF
 
 register_service() {
     log_step "Регистрация сервиса"
-    
+
     cat > "$SERVICE_FILE" << 'EOF'
 #!/bin/sh
 # RouteGuard Service Script
@@ -416,10 +416,17 @@ BIN="/opt/bin/routeguard"
 CONFIG="/opt/etc/routeguard/config.json"
 PIDFILE="/var/run/$NAME.pid"
 LOGDIR="/opt/var/log/routeguard"
+LOGFILE="$LOGDIR/routeguard.log"
 
 # Проверка существования бинарника
 if [ ! -x "$BIN" ]; then
     echo "Error: $BIN not found or not executable"
+    exit 1
+fi
+
+# Проверка конфигурации
+if [ ! -f "$CONFIG" ]; then
+    echo "Error: $CONFIG not found"
     exit 1
 fi
 
@@ -428,22 +435,29 @@ start() {
         echo "$NAME is already running"
         return 0
     fi
-    
+
     echo "Starting $NAME..."
-    
+
     # Создание директории для логов если не существует
     mkdir -p "$LOGDIR"
-    
-    # Запуск демона
-    start-stop-daemon -S -b -m -p "$PIDFILE" \
-        -x "$BIN" -- daemon -config "$CONFIG"
-    
-    sleep 1
-    
+
+    # Запуск демона (пробуем start-stop-daemon, fallback на nohup)
+    if command -v start-stop-daemon >/dev/null 2>&1; then
+        start-stop-daemon -S -b -m -p "$PIDFILE" \
+            -x "$BIN" -- -config "$CONFIG" >> "$LOGFILE" 2>&1
+    else
+        # Fallback для систем без start-stop-daemon
+        nohup "$BIN" -config "$CONFIG" >> "$LOGFILE" 2>&1 &
+        echo $! > "$PIDFILE"
+    fi
+
+    sleep 2
+
     if pidof "$NAME" > /dev/null; then
         echo "$NAME started"
     else
         echo "Failed to start $NAME"
+        echo "Check logs: $LOGFILE"
         return 1
     fi
 }
