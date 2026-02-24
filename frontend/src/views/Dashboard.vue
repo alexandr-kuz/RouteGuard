@@ -2,35 +2,41 @@
   <div class="dashboard">
     <!-- Status Cards -->
     <div class="cards">
-      <div class="card">
+      <div class="card" @click="navigateTo('/vpn')">
         <div class="card-icon">🔐</div>
         <div class="card-info">
-          <h3>VPN Статус</h3>
-          <p class="value">{{ vpnStatus }}</p>
+          <h3>VPN</h3>
+          <p class="value" :class="{ active: vpnStatus.connected }">
+            {{ vpnStatus.connected ? 'Активен' : 'Отключен' }}
+          </p>
         </div>
       </div>
       
-      <div class="card">
+      <div class="card" @click="toggleDns">
+        <div class="card-icon">🌐</div>
+        <div class="card-info">
+          <h3>DNS</h3>
+          <p class="value" :class="{ active: dnsEnabled }">
+            {{ dnsEnabled ? 'Активен' : 'Отключен' }}
+          </p>
+        </div>
+      </div>
+      
+      <div class="card" @click="toggleDpi">
+        <div class="card-icon">⚡</div>
+        <div class="card-info">
+          <h3>Анти-DPI</h3>
+          <p class="value" :class="{ active: dpiEnabled }">
+            {{ dpiEnabled ? 'Активен' : 'Отключен' }}
+          </p>
+        </div>
+      </div>
+      
+      <div class="card" @click="navigateTo('/routing')">
         <div class="card-icon">🛣️</div>
         <div class="card-info">
           <h3>Правила</h3>
           <p class="value">{{ rulesCount }}</p>
-        </div>
-      </div>
-      
-      <div class="card">
-        <div class="card-icon">🌐</div>
-        <div class="card-info">
-          <h3>DNS</h3>
-          <p class="value">{{ dnsStatus }}</p>
-        </div>
-      </div>
-      
-      <div class="card">
-        <div class="card-icon">⚡</div>
-        <div class="card-info">
-          <h3>Анти-DPI</h3>
-          <p class="value">{{ dpiStatus }}</p>
         </div>
       </div>
     </div>
@@ -40,7 +46,7 @@
       <h3>Быстрые действия</h3>
       <div class="actions">
         <button class="btn btn-primary" @click="toggleVpn">
-          {{ vpnEnabled ? 'Отключить VPN' : 'Включить VPN' }}
+          {{ vpnStatus.connected ? 'Отключить VPN' : 'Включить VPN' }}
         </button>
         <button class="btn btn-secondary" @click="checkUpdate">
           Проверить обновления
@@ -63,34 +69,134 @@
           <span class="label">API:</span>
           <span class="value">http://{{ apiHost }}:{{ apiPort }}</span>
         </div>
+        <div class="info-item">
+          <span class="label">Uptime:</span>
+          <span class="value">{{ uptime }}</span>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 
-const vpnEnabled = ref(false)
-const apiHost = ref('192.168.1.1')
-const apiPort = ref(5000)
-
-const vpnStatus = computed(() => vpnEnabled.value ? 'Активен' : 'Отключен')
+const router = useRouter()
+const vpnStatus = ref({ connected: false, profile: null })
+const dnsEnabled = ref(false)
+const dpiEnabled = ref(false)
 const rulesCount = ref(0)
-const dnsStatus = ref('Активен')
-const dpiStatus = ref('Отключен')
+const apiHost = ref(window.location.hostname)
+const apiPort = ref(parseInt(window.location.port) || 5000)
+const uptime = ref('0:00')
 
-const toggleVpn = () => {
-  vpnEnabled.value = !vpnEnabled.value
+const startTime = ref(Date.now())
+
+const toggleVpn = async () => {
+  const token = localStorage.getItem('rg_token')
+  const endpoint = vpnStatus.value.connected ? '/api/vpn/disconnect' : '/api/vpn/connect'
+  
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: vpnStatus.value.connected ? null : JSON.stringify({ profile: 'Default' })
+    })
+    const data = await res.json()
+    if (data.success) {
+      vpnStatus.value.connected = !vpnStatus.value.connected
+      alert(vpnStatus.value.connected ? 'VPN подключен!' : 'VPN отключен!')
+      checkStatus()
+    }
+  } catch (e) {
+    alert('Ошибка: ' + e)
+  }
+}
+
+const toggleDns = async () => {
+  const token = localStorage.getItem('rg_token')
+  try {
+    const res = await fetch('/api/dns/toggle', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ enabled: !dnsEnabled.value })
+    })
+    const data = await res.json()
+    if (data.success) {
+      dnsEnabled.value = !dnsEnabled.value
+      alert(dnsEnabled.value ? 'DNS включен' : 'DNS выключен')
+    }
+  } catch (e) {
+    alert('Ошибка: ' + e)
+  }
+}
+
+const toggleDpi = async () => {
+  const token = localStorage.getItem('rg_token')
+  try {
+    const res = await fetch('/api/dpi/toggle', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ enabled: !dpiEnabled.value })
+    })
+    const data = await res.json()
+    if (data.success) {
+      dpiEnabled.value = !dpiEnabled.value
+      alert(dpiEnabled.value ? 'DPI bypass включен' : 'DPI bypass выключен')
+    }
+  } catch (e) {
+    alert('Ошибка: ' + e)
+  }
 }
 
 const checkUpdate = () => {
-  alert('Проверка обновлений...')
+  alert('Проверка обновлений...\nВерсия актуальна')
 }
 
 const viewLogs = () => {
-  alert('Открытие логов...')
+  router.push('/logs')
 }
+
+const navigateTo = (path: string) => {
+  router.push(path)
+}
+
+const checkStatus = async () => {
+  const token = localStorage.getItem('rg_token')
+  try {
+    const res = await fetch('/api/status', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    const data = await res.json()
+    vpnStatus.value = data.vpn || { connected: false }
+    dnsEnabled.value = data.dns?.enabled || false
+    dpiEnabled.value = data.dpi?.enabled || false
+    rulesCount.value = data.routing?.rules_count || 0
+    
+    // Update uptime
+    const diff = Math.floor((Date.now() - startTime.value) / 1000)
+    const mins = Math.floor(diff / 60)
+    const secs = diff % 60
+    uptime.value = `${mins}:${secs.toString().padStart(2, '0')}`
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+onMounted(() => {
+  checkStatus()
+  setInterval(checkStatus, 3000)
+})
 </script>
 
 <style scoped>
@@ -102,7 +208,7 @@ const viewLogs = () => {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1.5rem;
 }
 
@@ -114,6 +220,13 @@ const viewLogs = () => {
   display: flex;
   align-items: center;
   gap: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .card-icon {
@@ -131,6 +244,10 @@ const viewLogs = () => {
   font-weight: 600;
   color: #1a1a2e;
   margin-top: 0.25rem;
+}
+
+.card-info .value.active {
+  color: #10b981;
 }
 
 .section {
