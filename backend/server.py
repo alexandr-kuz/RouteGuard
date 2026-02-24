@@ -261,9 +261,12 @@ class RouteGuardHandler(BaseHTTPRequestHandler):
     def serve_frontend(self, path):
         """Отдать файлы фронтенда"""
         frontend_dir = '/opt/etc/routeguard/frontend'
-        file_path = os.path.join(frontend_dir, path)
+        # Исправляем пути для Windows-слэшей
+        path = path.replace('\\', '/')
+        file_path = os.path.join(frontend_dir, *path.split('/'))
         
         if not os.path.exists(file_path):
+            logger.warning(f'Frontend file not found: {file_path}')
             self.send_error_json('Not Found', 404)
             return
         
