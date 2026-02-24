@@ -1,5 +1,4 @@
 # Go
-/bin/
 *.exe
 *.exe~
 *.dll
@@ -34,8 +33,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Vue/Vite
-dist/
+# Vue/Vite - ignore frontend dist but keep root dist for releases
+frontend/dist/
 dist-ssr/
 *.local
 

@@ -1,0 +1,578 @@
+#!/bin/sh
+# RouteGuard Installer
+# Установка: curl -sL https://github.com/alexandr-kuz/RouteGuard/releases/latest/download/install.sh | sh
+#
+# Документация: https://github.com/alexandr-kuz/RouteGuard
+
+# Не прерываемся на ошибках - обрабатываем их явно
+# set -e убран для совместимости с BusyBox
+
+# =============================================================================
+# КОНФИГУРАЦИЯ
+# =============================================================================
+
+VERSION="${RG_VERSION:-latest}"
+REPO="${RG_REPO:-alexandr-kuz/RouteGuard}"
+BASE_URL="https://github.com/${REPO}/releases"
+
+# Пути установки
+INSTALL_DIR="/opt/etc/routeguard"
+BIN_DIR="/opt/bin"
+LOG_DIR="/opt/var/log/routeguard"
+DATA_DIR="/opt/var/lib/routeguard"
+SERVICE_FILE="/opt/etc/init.d/S50rguard"
+CONFIG_FILE="$INSTALL_DIR/config.json"
+
+# Цвета
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+# =============================================================================
+# ФУНКЦИИ ЛОГИРОВАНИЯ
+# =============================================================================
+
+log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+log_warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step()    { echo -e "${CYAN}━━━ $1 ━━━${NC}"; }
+
+# =============================================================================
+# ПРОВЕРКА ОКРУЖЕНИЯ
+# =============================================================================
+
+check_prerequisites() {
+    log_step "Проверка окружения"
+    
+    # Проверка Entware
+    if [ ! -f "/opt/bin/opkg" ]; then
+        log_error "Entware не найден. Установите Entware на ваш роутер."
+        log_info "Инструкция: https://kb.keenetic.ru/hc/ru/articles/360000202345"
+        exit 1
+    fi
+    log_success "Entware найден"
+    
+    # Проверка архитектуры
+    ARCH=$(uname -m)
+    
+    # Определение endianness для MIPS (Keenetic и другие роутеры могут показывать "mips" даже для mipsel)
+    # Проверяем по репозиторию Entware или по ELF заголовку системы
+    detect_mips_endian() {
+        # Способ 1: проверяем путь к репозиторию Entware
+        if [ -f "/opt/var/opkg-lists/entware" ]; then
+            if grep -q "mipselsf" /opt/var/opkg-lists/entware 2>/dev/null; then
+                echo "le"
+                return
+            elif grep -q "mipssf" /opt/var/opkg-lists/entware 2>/dev/null; then
+                echo "be"
+                return
+            fi
+        fi
+        
+        # Способ 2: проверяем бинарник ls
+        if [ -f "/bin/ls" ] && command -v hexdump >/dev/null 2>&1; then
+            ELF_DATA=$(head -c 5 /bin/ls | hexdump -v -n 1 -s 4 -e '1/1 "%02x"')
+            # ELF data encoding: 01 = little-endian, 02 = big-endian
+            if [ "$ELF_DATA" = "01" ]; then
+                echo "le"
+                return
+            elif [ "$ELF_DATA" = "02" ]; then
+                echo "be"
+                return
+            fi
+        fi
+        
+        # Способ 3: проверяем /proc/cpuinfo
+        if [ -f /proc/cpuinfo ]; then
+            if grep -qi "mipsel\|little" /proc/cpuinfo 2>/dev/null; then
+                echo "le"
+                return
+            fi
+        fi
+        
+        # По умолчанию считаем little-endian (более распространён)
+        echo "le"
+    }
+    
+    case "$ARCH" in
+        mips)
+            ENDIAN=$(detect_mips_endian)
+            if [ "$ENDIAN" = "le" ]; then
+                TARGET="mipsle"
+                log_info "MIPS little-endian detected (mipsel)"
+            else
+                TARGET="mips"
+                log_info "MIPS big-endian detected"
+            fi
+            ;;
+        mipsel)
+            TARGET="mipsle"
+            ;;
+        armv7l|armv6l)
+            TARGET="arm"
+            ;;
+        aarch64|armv8l)
+            TARGET="arm64"
+            ;;
+        x86_64|amd64)
+            TARGET="amd64"
+            ;;
+        i686|i386)
+            TARGET="386"
+            ;;
+        *)
+            log_error "Unsupported architecture: $ARCH"
+            exit 1
+            ;;
+    esac
+    log_success "Architecture: $ARCH ($TARGET)"
+    
+    # Проверка свободной памяти
+    FREE_MEM=$(free -m 2>/dev/null | awk '/^Mem:/ {print $7}' || echo "100")
+    if [ "$FREE_MEM" -lt 50 ]; then
+        log_warn "Мало свободной памяти: ${FREE_MEM}MB (рекомендуется 100MB+)"
+    else
+        log_success "Свободная память: ${FREE_MEM}MB"
+    fi
+    
+    # Проверка прав root
+    if [ "$(id -u)" != "0" ]; then
+        log_error "Требуются права root"
+        exit 1
+    fi
+    log_success "Права root подтверждены"
+    
+    # Проверка места на диске
+    FREE_SPACE=$(df -m /opt 2>/dev/null | awk 'NR==2 {print $4}' || echo "100")
+    if [ "$FREE_SPACE" -lt 50 ]; then
+        log_warn "Мало места на /opt: ${FREE_SPACE}MB (рекомендуется 100MB+)"
+    else
+        log_success "Свободное место: ${FREE_SPACE}MB"
+    fi
+}
+
+# =============================================================================
+# ЗАГРУЗКА БИНАРНИКОВ
+# =============================================================================
+
+download_binaries() {
+    log_step "Загрузка RouteGuard"
+
+    # Определение версии и URL
+    if [ "$VERSION" = "latest" ]; then
+        log_info "Поиск последней версии..."
+        VERSION=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" \
+                  | grep '"tag_name":' | cut -d'"' -f4 | sed 's/^v//')
+        if [ -z "$VERSION" ]; then
+            log_error "Не удалось получить последнюю версию"
+            exit 1
+        fi
+    fi
+    log_info "Версия: $VERSION"
+
+    # Формирование URL - загружаем прямой бинарник
+    FILENAME="routeguard-${TARGET}"
+    URL="${BASE_URL}/download/v${VERSION}/${FILENAME}"
+
+    log_info "Загрузка: $URL"
+
+    # Временная директория
+    TMP_DIR="/tmp/routeguard-install-$$"
+    mkdir -p "$TMP_DIR"
+
+    # Загрузка бинарника
+    if ! curl -sL "$URL" -o "$TMP_DIR/routeguard"; then
+        log_error "Не удалось загрузить бинарник"
+        rm -rf "$TMP_DIR"
+        exit 1
+    fi
+    log_success "Бинарник загружен"
+
+    # Проверка что файл не пустой и начинается с ELF заголовка
+    if [ ! -s "$TMP_DIR/routeguard" ]; then
+        log_error "Загруженный файл пуст!"
+        rm -rf "$TMP_DIR"
+        exit 1
+    fi
+
+    # Проверка ELF заголовка (совместимо с BusyBox)
+    if command -v hexdump >/dev/null 2>&1; then
+        ELF_MAGIC=$(head -c 4 "$TMP_DIR/routeguard" | hexdump -v -n 4 -e '1/1 "%02x"')
+        if [ "$ELF_MAGIC" != "7f454c46" ]; then
+            log_error "Загружен не ELF файл! Возможна атака."
+            log_error "Magic bytes: $ELF_MAGIC (ожидалось 7f454c46)"
+            rm -rf "$TMP_DIR"
+            exit 1
+        fi
+        log_success "Проверка файла пройдена"
+    else
+        log_warn "hexdump не найден, пропускаю проверку ELF"
+    fi
+    
+    # Установка бинарника
+    cp "$TMP_DIR/routeguard" "$BIN_DIR/"
+    chmod +x "$BIN_DIR/routeguard"
+
+    # Очистка
+    rm -rf "$TMP_DIR"
+
+    log_success "Бинарники установлены в $BIN_DIR"
+}
+
+# =============================================================================
+# УСТАНОВКА ЗАВИСИМОСТЕЙ
+# =============================================================================
+
+install_dependencies() {
+    log_step "Установка зависимостей"
+    
+    log_info "Обновление списков пакетов..."
+    opkg update || true
+    
+    # curl (обязательно для работы)
+    if ! command -v curl >/dev/null 2>&1; then
+        log_info "Установка curl..."
+        opkg install curl || log_warn "curl не установлен"
+    fi
+    log_success "curl готов"
+    
+    # openssl (для генерации токенов) - в Entware называется libopenssl
+    if ! command -v openssl >/dev/null 2>&1; then
+        log_info "Установка openssl..."
+        # Пробуем разные варианты имён пакета
+        opkg install libopenssl 2>/dev/null || \
+        opkg install openssl-util 2>/dev/null || \
+        opkg install openssl 2>/dev/null || \
+        log_warn "openssl не установлен (токен будет сгенерирован альтернативным способом)"
+    fi
+    if command -v openssl >/dev/null 2>&1; then
+        log_success "openssl готов"
+    else
+        log_warn "openssl недоступен, использую альтернативную генерацию токена"
+    fi
+
+    # sing-box (основное VPN-ядро) - может отсутствовать в стандартном репозитории
+    if command -v sing-box >/dev/null 2>&1; then
+        log_success "sing-box уже установлен"
+    else
+        log_info "Установка sing-box..."
+        opkg install sing-box 2>/dev/null || \
+        log_info "sing-box отсутствует в репозитории. Установите вручную если нужно VPN."
+    fi
+    
+    # ByeDPI (обход DPI) - может отсутствовать
+    if command -v byedpi >/dev/null 2>&1; then
+        log_success "ByeDPI уже установлен"
+    else
+        log_info "Установка ByeDPI..."
+        opkg install byedpi 2>/dev/null || \
+        log_info "ByeDPI отсутствует в репозитории. Установите вручную если нужен обход DPI."
+    fi
+    
+    log_success "Зависимости проверены"
+}
+
+# =============================================================================
+# СОЗДАНИЕ ДИРЕКТОРИЙ
+# =============================================================================
+
+create_directories() {
+    log_step "Создание директорий"
+    
+    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR/configs"
+    mkdir -p "$INSTALL_DIR/profiles"
+    mkdir -p "$INSTALL_DIR/rulesets"
+    mkdir -p "$INSTALL_DIR/certs"
+    mkdir -p "$LOG_DIR"
+    mkdir -p "$DATA_DIR"
+    mkdir -p "$DATA_DIR/geoip"
+    mkdir -p "$DATA_DIR/geosite"
+    mkdir -p "$DATA_DIR/backups"
+    
+    # Установка правильных прав
+    chmod 755 "$INSTALL_DIR"
+    chmod 755 "$LOG_DIR"
+    chmod 700 "$DATA_DIR"
+    chmod 700 "$INSTALL_DIR/certs"
+    
+    log_success "Директории созданы"
+}
+
+# =============================================================================
+# ГЕНЕРАЦИЯ КОНФИГУРАЦИИ
+# =============================================================================
+
+generate_config() {
+    log_step "Генерация конфигурации"
+
+    # Генерация API токена (fallback если openssl недоступен)
+    if command -v openssl >/dev/null 2>&1; then
+        API_TOKEN=$(openssl rand -hex 32 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
+    else
+        API_TOKEN=$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
+    fi
+
+    # Определение локального IP
+    LOCAL_IP=$(hostname -i 2>/dev/null || ip route get 1 2>/dev/null | awk '{print $7; exit}' || echo "192.168.1.1")
+
+    # Timestamp (совместимо с BusyBox)
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
+
+    # Создание config.json
+    cat > "$CONFIG_FILE" << EOF
+{
+    "version": "0.1.0",
+    "installed_at": "$TIMESTAMP",
+
+    "api": {
+        "host": "0.0.0.0",
+        "port": 8080,
+        "token": "$API_TOKEN",
+        "cors": true,
+        "allowed_origins": ["http://$LOCAL_IP:8080"]
+    },
+
+    "vpn": {
+        "enabled": true,
+        "core": "sing-box",
+        "config_dir": "/opt/etc/routeguard/profiles",
+        "auto_connect": false
+    },
+
+    "routing": {
+        "enabled": true,
+        "mode": "domain",
+        "default_route": "direct",
+        "rulesets_dir": "/opt/etc/routeguard/rulesets"
+    },
+
+    "dns": {
+        "enabled": true,
+        "port": 53,
+        "upstream": "tls://1.1.1.1",
+        "bootstrap": "1.1.1.1",
+        "cache_ttl": 300,
+        "adblock": {
+            "enabled": false,
+            "lists": []
+        }
+    },
+
+    "dpi": {
+        "enabled": false,
+        "mode": "auto",
+        "bypass_domains": []
+    },
+
+    "logging": {
+        "level": "info",
+        "file": "/opt/var/log/routeguard/routeguard.log",
+        "max_size_mb": 10,
+        "max_backups": 3
+    },
+
+    "update": {
+        "auto_check": true,
+        "check_interval": "24h",
+        "auto_install": false
+    },
+
+    "security": {
+        "rate_limit": 100,
+        "session_timeout": "24h"
+    }
+}
+EOF
+
+    # Сохранение токена в отдельный файл
+    echo "$API_TOKEN" > "$INSTALL_DIR/.api_token"
+    chmod 600 "$INSTALL_DIR/.api_token"
+    
+    # Сохранение информации для вывода
+    echo "$LOCAL_IP" > "$INSTALL_DIR/.local_ip"
+    
+    log_success "Конфигурация создана"
+}
+
+# =============================================================================
+# РЕГИСТРАЦИЯ СЕРВИСА
+# =============================================================================
+
+register_service() {
+    log_step "Регистрация сервиса"
+    
+    cat > "$SERVICE_FILE" << 'EOF'
+#!/bin/sh
+# RouteGuard Service Script
+# Usage: /opt/etc/init.d/S50rguard {start|stop|restart|status}
+
+NAME="routeguard"
+BIN="/opt/bin/routeguard"
+CONFIG="/opt/etc/routeguard/config.json"
+PIDFILE="/var/run/$NAME.pid"
+LOGDIR="/opt/var/log/routeguard"
+
+# Проверка существования бинарника
+if [ ! -x "$BIN" ]; then
+    echo "Error: $BIN not found or not executable"
+    exit 1
+fi
+
+start() {
+    if pidof "$NAME" > /dev/null; then
+        echo "$NAME is already running"
+        return 0
+    fi
+    
+    echo "Starting $NAME..."
+    
+    # Создание директории для логов если не существует
+    mkdir -p "$LOGDIR"
+    
+    # Запуск демона
+    start-stop-daemon -S -b -m -p "$PIDFILE" \
+        -x "$BIN" -- daemon -config "$CONFIG"
+    
+    sleep 1
+    
+    if pidof "$NAME" > /dev/null; then
+        echo "$NAME started"
+    else
+        echo "Failed to start $NAME"
+        return 1
+    fi
+}
+
+stop() {
+    if ! pidof "$NAME" > /dev/null; then
+        echo "$NAME is not running"
+        return 0
+    fi
+    
+    echo "Stopping $NAME..."
+    start-stop-daemon -K -p "$PIDFILE"
+    rm -f "$PIDFILE"
+    
+    sleep 1
+    
+    if ! pidof "$NAME" > /dev/null; then
+        echo "$NAME stopped"
+    else
+        echo "Failed to stop $NAME"
+        return 1
+    fi
+}
+
+restart() {
+    stop
+    sleep 1
+    start
+}
+
+status() {
+    if pidof "$NAME" > /dev/null; then
+        PID=$(pidof "$NAME")
+        echo "$NAME is running (PID: $PID)"
+        return 0
+    else
+        echo "$NAME is stopped"
+        return 1
+    fi
+}
+
+case "$1" in
+    start)   start ;;
+    stop)    stop ;;
+    restart) restart ;;
+    status)  status ;;
+    *)       echo "Usage: $0 {start|stop|restart|status}" ;;
+esac
+EOF
+
+    chmod +x "$SERVICE_FILE"
+    
+    log_success "Сервис зарегистрирован"
+}
+
+# =============================================================================
+# ЗАПУСК СЕРВИСА
+# =============================================================================
+
+start_service() {
+    log_step "Запуск сервиса"
+    
+    "$SERVICE_FILE" start
+    
+    sleep 2
+    
+    # Health check
+    if pidof routeguard > /dev/null; then
+        log_success "Сервис запущен"
+    else
+        log_error "Не удалось запустить сервис"
+        log_info "Проверьте логи: $LOG_DIR/routeguard.log"
+        exit 1
+    fi
+}
+
+# =============================================================================
+# ВЫВОД ИНФОРМАЦИИ
+# =============================================================================
+
+print_summary() {
+    LOCAL_IP=$(cat "$INSTALL_DIR/.local_ip" 2>/dev/null || echo "ROUTER_IP")
+    API_TOKEN=$(cat "$INSTALL_DIR/.api_token" 2>/dev/null || echo "unknown")
+    
+    echo ""
+    echo -e "${GREEN}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║   RouteGuard успешно установлен!                  ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "  🌐 Web UI:  http://${LOCAL_IP}:8080"
+    echo "  🔑 Токен:   ${API_TOKEN}"
+    echo ""
+    echo "  📁 Директории:"
+    echo "     Конфигурация: $INSTALL_DIR"
+    echo "     Логи: $LOG_DIR"
+    echo "     Данные: $DATA_DIR"
+    echo ""
+    echo "  🎛️ Управление:"
+    echo "     $SERVICE_FILE start|stop|restart|status"
+    echo "     routeguard status|update|backup|restore"
+    echo ""
+    echo "  📚 Документация:"
+    echo "     https://github.com/${REPO}"
+    echo ""
+    echo "  ⚠️  Сохраните токен доступа в безопасном месте!"
+    echo ""
+}
+
+# =============================================================================
+# ОСНОВНАЯ ФУНКЦИЯ
+# =============================================================================
+
+main() {
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║   RouteGuard Installer v${VERSION}              ║${NC}"
+    echo -e "${BLUE}║   Установка VPN-платформы для Entware            ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    check_prerequisites
+    download_binaries
+    install_dependencies
+    create_directories
+    generate_config
+    register_service
+    start_service
+    print_summary
+}
+
+# Запуск
+main "$@"

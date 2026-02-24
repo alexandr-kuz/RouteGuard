@@ -5,7 +5,7 @@ param(
     [Parameter(Position=0)]
     [string]$Command = "build",
     
-    [string]$Version = "0.1.1"
+    [string]$Version = "0.2.0"
 )
 
 $ErrorActionPreference = "Stop"

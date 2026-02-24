@@ -24,7 +24,7 @@ import (
 
 const (
 	appName    = "routeguard"
-	appVersion = "0.1.1"
+	appVersion = "0.2.0"
 )
 
 // getDefaultConfigPath возвращает путь к конфигурации по умолчанию для текущей ОС
