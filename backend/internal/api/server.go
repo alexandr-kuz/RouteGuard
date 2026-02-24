@@ -74,7 +74,7 @@ func (s *Server) setupMiddleware() {
 
 	// CORS
 	if s.config.CORS {
-		s.router.Use(corsMiddleware())
+		s.router.Use(corsMiddleware(s.config))
 	}
 
 	// Rate limiting
@@ -233,9 +233,27 @@ func (s *Server) updateSettings(c *gin.Context)       { c.JSON(200, gin.H{"updat
 
 // Middleware функции (будут реализованы отдельно)
 
-func corsMiddleware() gin.HandlerFunc {
+func corsMiddleware(cfg config.APIConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		// Используем разрешённые origins из конфигурации
+		origin := c.Request.Header.Get("Origin")
+		allowed := false
+		
+		if len(cfg.AllowedOrigins) > 0 {
+			for _, o := range cfg.AllowedOrigins {
+				if o == "*" || o == origin {
+					allowed = true
+					break
+				}
+			}
+			if allowed {
+				c.Header("Access-Control-Allow-Origin", origin)
+			}
+		} else if cfg.CORS {
+			// Если CORS включён но origins не указаны, разрешаем все
+			c.Header("Access-Control-Allow-Origin", "*")
+		}
+		
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, X-API-Token")
 		if c.Request.Method == "OPTIONS" {
@@ -257,8 +275,20 @@ func rateLimitMiddleware(token string) gin.HandlerFunc {
 
 func authMiddleware(token string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Пропускать health check и static
-		if c.Request.URL.Path == "/health" || c.Request.URL.Path == "/" {
+		// Пропускать health check
+		if c.Request.URL.Path == "/health" {
+			c.Next()
+			return
+		}
+
+		// Пропускать static files без аутентификации
+		if len(c.Request.URL.Path) > 7 && c.Request.URL.Path[:7] == "/static" {
+			c.Next()
+			return
+		}
+
+		// Пропускать корневой путь для отдачи index.html
+		if c.Request.URL.Path == "/" {
 			c.Next()
 			return
 		}
@@ -266,11 +296,6 @@ func authMiddleware(token string) gin.HandlerFunc {
 		// Проверка API токена
 		apiToken := c.GetHeader("X-API-Token")
 		if apiToken == "" {
-			// Для static files не требовать токен
-			if c.Request.URL.Path == "/" || c.Request.URL.Path == "/index.html" {
-				c.Next()
-				return
-			}
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Требуется API токен"})
 			c.Abort()
 			return

@@ -18,7 +18,7 @@ func NewBypass(cfg config.DPIConfig, logger *zap.Logger) (*Bypass, error) {
 	b := &Bypass{
 		config:  cfg,
 		logger:  logger,
-		running: cfg.Enabled,
+		running: false, // Обход ещё не запущен
 	}
 	return b, nil
 }

@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"go.uber.org/zap"
@@ -23,13 +24,17 @@ type Manager struct {
 	profiles []Profile
 	current  *Profile
 	cancel   context.CancelFunc
+	ctx      context.Context
 }
 
 func NewManager(cfg config.VPNConfig, logger *zap.Logger) (*Manager, error) {
+	ctx, cancel := context.WithCancel(context.Background())
 	m := &Manager{
 		config:   cfg,
 		logger:   logger,
 		profiles: make([]Profile, 0),
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 	return m, nil
 }
@@ -50,25 +55,31 @@ func (m *Manager) AddProfile(p Profile) error {
 func (m *Manager) RemoveProfile(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	
 	for i, p := range m.profiles {
 		if p.ID == id {
 			m.profiles = append(m.profiles[:i], m.profiles[i+1:]...)
-			break
+			return nil
 		}
 	}
-	return nil
+	
+	return fmt.Errorf("профиль с ID %s не найден", id)
 }
 
 func (m *Manager) Connect(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for i, p := range m.profiles {
+	
+	for _, p := range m.profiles {
 		if p.ID == id {
-			m.current = &m.profiles[i]
+			// Создаём копию профиля вместо указателя на элемент среза
+			profileCopy := p
+			m.current = &profileCopy
 			return nil
 		}
 	}
-	return nil
+	
+	return fmt.Errorf("профиль с ID %s не найден", id)
 }
 
 func (m *Manager) Disconnect() error {

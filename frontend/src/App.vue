@@ -1,11 +1,11 @@
 <template>
   <div id="app">
     <div class="container">
-      <h1>RouteGuard</h1>
-      <p class="subtitle">Универсальная VPN-платформа для Entware</p>
+      <h1>{{ t('common.app_name') }}</h1>
+      <p class="subtitle">{{ t('common.slogan') }}</p>
       <div class="status">
-        <p>Версия: 0.1.0</p>
-        <p>Статус: Разработка</p>
+        <p>{{ t('common.version') }}: 0.1.0</p>
+        <p>{{ t('status.developing') }}</p>
       </div>
       <div class="info">
         <p>Frontend в разработке. Backend доступен по адресу: <code>http://localhost:8080</code></p>
@@ -15,6 +15,9 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 </script>
 
 <style>

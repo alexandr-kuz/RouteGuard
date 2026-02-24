@@ -293,7 +293,8 @@
     "success": "Успешно",
     "pending": "Ожидание",
     "active": "Активно",
-    "inactive": "Неактивно"
+    "inactive": "Неактивно",
+    "developing": "Статус: Разработка"
   },
 
   "messages": {

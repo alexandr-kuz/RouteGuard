@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"routeguard/internal/api"
@@ -26,9 +27,22 @@ const (
 	appVersion = "0.1.1"
 )
 
+// getDefaultConfigPath возвращает путь к конфигурации по умолчанию для текущей ОС
+func getDefaultConfigPath() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "config.json"
+	case "darwin":
+		return "/usr/local/etc/routeguard/config.json"
+	default: // linux
+		return "/opt/etc/routeguard/config.json"
+	}
+}
+
 func main() {
 	// Парсинг флагов командной строки
-	configPath := flag.String("config", "/opt/etc/routeguard/config.json", "Путь к конфигурационному файлу")
+	defaultConfig := getDefaultConfigPath()
+	configPath := flag.String("config", defaultConfig, "Путь к конфигурационному файлу")
 	showVersion := flag.Bool("version", false, "Показать версию")
 	flag.Parse()
 
@@ -63,10 +77,9 @@ func main() {
 	if cfg.VPN.Enabled {
 		vpnManager, err = vpn.NewManager(cfg.VPN, logger)
 		if err != nil {
-			logger.Error("ошибка инициализации VPN менеджера", zap.Error(err))
-		} else {
-			logger.Info("VPN модуль инициализирован")
+			logger.Fatal("критическая ошибка инициализации VPN менеджера", zap.Error(err))
 		}
+		logger.Info("VPN модуль инициализирован")
 	}
 
 	// Routing модуль
@@ -74,10 +87,9 @@ func main() {
 	if cfg.Routing.Enabled {
 		routingEngine, err = routing.NewEngine(cfg.Routing, logger)
 		if err != nil {
-			logger.Error("ошибка инициализации routing движка", zap.Error(err))
-		} else {
-			logger.Info("Routing модуль инициализирован")
+			logger.Fatal("критическая ошибка инициализации routing движка", zap.Error(err))
 		}
+		logger.Info("Routing модуль инициализирован")
 	}
 
 	// DNS модуль
@@ -85,10 +97,12 @@ func main() {
 	if cfg.DNS.Enabled {
 		dnsServer, err = dns.NewServer(cfg.DNS, logger)
 		if err != nil {
-			logger.Error("ошибка инициализации DNS сервера", zap.Error(err))
-		} else {
-			logger.Info("DNS модуль инициализирован")
+			logger.Fatal("критическая ошибка инициализации DNS сервера", zap.Error(err))
 		}
+		if err := dnsServer.Start(); err != nil {
+			logger.Fatal("ошибка запуска DNS сервера", zap.Error(err))
+		}
+		logger.Info("DNS модуль инициализирован и запущен")
 	}
 
 	// DPI модуль
@@ -96,10 +110,12 @@ func main() {
 	if cfg.DPI.Enabled {
 		dpiBypass, err = dpi.NewBypass(cfg.DPI, logger)
 		if err != nil {
-			logger.Error("ошибка инициализации DPI обхода", zap.Error(err))
-		} else {
-			logger.Info("DPI модуль инициализирован")
+			logger.Fatal("критическая ошибка инициализации DPI обхода", zap.Error(err))
 		}
+		if err := dpiBypass.Start(); err != nil {
+			logger.Fatal("ошибка запуска DPI обхода", zap.Error(err))
+		}
+		logger.Info("DPI модуль инициализирован и запущен")
 	}
 
 	// System модуль

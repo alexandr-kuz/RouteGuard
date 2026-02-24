@@ -18,7 +18,7 @@ func NewServer(cfg config.DNSConfig, logger *zap.Logger) (*Server, error) {
 	s := &Server{
 		config:  cfg,
 		logger:  logger,
-		running: cfg.Enabled,
+		running: false, // Сервер ещё не запущен
 	}
 	return s, nil
 }

@@ -13,15 +13,14 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
-    minify: false,
+    minify: 'esbuild',
+    sourcemap: true,
     outDir: 'dist',
     assetsDir: 'assets',
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['vue', 'vue-router', 'pinia', 'axios'],
-          ui: ['naive-ui'],
-          charts: ['echarts', 'vue-echarts'],
+          vendor: ['vue', 'vue-i18n'],
         },
       },
     },
@@ -30,6 +29,10 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/static': {
         target: 'http://localhost:8080',
         changeOrigin: true,
       },

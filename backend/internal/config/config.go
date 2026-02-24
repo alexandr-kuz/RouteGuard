@@ -107,14 +107,14 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("парсинг JSON: %w", err)
 	}
 
+	// Установка значений по умолчанию (ДО валидации)
+	setDefaults(&cfg)
+
 	// Валидация
 	validate := validator.New()
 	if err := validate.Struct(&cfg); err != nil {
 		return nil, fmt.Errorf("валидация конфигурации: %w", err)
 	}
-
-	// Установка значений по умолчанию
-	setDefaults(&cfg)
 
 	// Создание директорий если не существуют
 	if err := ensureDirectories(&cfg); err != nil {
@@ -152,15 +152,23 @@ func setDefaults(cfg *Config) {
 // ensureDirectories - создание необходимых директорий
 func ensureDirectories(cfg *Config) error {
 	dirs := []string{
-		filepath.Dir(cfg.Logging.File),
 		cfg.VPN.ConfigDir,
 		cfg.Routing.RulesetsDir,
 	}
 
+	// Добавляем директорию для лог-файла (если путь не пустой)
+	if cfg.Logging.File != "" {
+		logDir := filepath.Dir(cfg.Logging.File)
+		// Не создаём директорию если это корень "/" или "."
+		if logDir != "" && logDir != "." && logDir != "/" {
+			dirs = append(dirs, logDir)
+		}
+	}
+
 	for _, dir := range dirs {
-		if dir != "" {
+		if dir != "" && dir != "." {
 			if err := os.MkdirAll(dir, 0755); err != nil {
-				return err
+				return fmt.Errorf("создание директории %s: %w", dir, err)
 			}
 		}
 	}
