@@ -35,8 +35,8 @@ rm -f /tmp/ps.zip
 
 # Download frontend
 echo "[2/5] Загрузка интерфейса..."
-curl -sL "https://github.com/$REPO/releases/download/v0.2.1/frontend-working.zip" -o /tmp/f.zip
-python3 -c "import zipfile; zipfile.ZipFile('/tmp/f.zip').extractall('$INSTALL_DIR/')"
+curl -sL "https://github.com/$REPO/releases/download/v0.2.1/vpn-full.zip" -o /tmp/f.zip
+python3 -c "import zipfile; zipfile.ZipFile('/tmp/f.zip').extractall('$INSTALL_DIR')"
 rm -f /tmp/f.zip
 
 # Install dependencies
