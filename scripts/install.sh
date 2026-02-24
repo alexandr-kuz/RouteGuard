@@ -4,7 +4,8 @@
 #
 # Документация: https://github.com/alexandr-kuz/RouteGuard
 
-set -e
+# Не прерываемся на ошибках - обрабатываем их явно
+# set -e убран для совместимости с BusyBox
 
 # =============================================================================
 # КОНФИГУРАЦИЯ
@@ -57,9 +58,56 @@ check_prerequisites() {
     
     # Проверка архитектуры
     ARCH=$(uname -m)
+    
+    # Определение endianness для MIPS (Keenetic и другие роутеры могут показывать "mips" даже для mipsel)
+    # Проверяем по репозиторию Entware или по ELF заголовку системы
+    detect_mips_endian() {
+        # Способ 1: проверяем путь к репозиторию Entware
+        if [ -f "/opt/var/opkg-lists/entware" ]; then
+            if grep -q "mipselsf" /opt/var/opkg-lists/entware 2>/dev/null; then
+                echo "le"
+                return
+            elif grep -q "mipssf" /opt/var/opkg-lists/entware 2>/dev/null; then
+                echo "be"
+                return
+            fi
+        fi
+        
+        # Способ 2: проверяем бинарник ls
+        if [ -f "/bin/ls" ] && command -v hexdump >/dev/null 2>&1; then
+            ELF_DATA=$(head -c 5 /bin/ls | hexdump -v -n 1 -s 4 -e '1/1 "%02x"')
+            # ELF data encoding: 01 = little-endian, 02 = big-endian
+            if [ "$ELF_DATA" = "01" ]; then
+                echo "le"
+                return
+            elif [ "$ELF_DATA" = "02" ]; then
+                echo "be"
+                return
+            fi
+        fi
+        
+        # Способ 3: проверяем /proc/cpuinfo
+        if [ -f /proc/cpuinfo ]; then
+            if grep -qi "mipsel\|little" /proc/cpuinfo 2>/dev/null; then
+                echo "le"
+                return
+            fi
+        fi
+        
+        # По умолчанию считаем little-endian (более распространён)
+        echo "le"
+    }
+    
     case "$ARCH" in
         mips)
-            TARGET="mips"
+            ENDIAN=$(detect_mips_endian)
+            if [ "$ENDIAN" = "le" ]; then
+                TARGET="mipsle"
+                log_info "MIPS little-endian detected (mipsel)"
+            else
+                TARGET="mips"
+                log_info "MIPS big-endian detected"
+            fi
             ;;
         mipsel)
             TARGET="mipsle"
@@ -183,57 +231,49 @@ install_dependencies() {
     log_step "Установка зависимостей"
     
     log_info "Обновление списков пакетов..."
-    opkg update
+    opkg update || true
     
-    # sing-box (основное VPN-ядро)
+    # curl (обязательно для работы)
+    if ! command -v curl >/dev/null 2>&1; then
+        log_info "Установка curl..."
+        opkg install curl || log_warn "curl не установлен"
+    fi
+    log_success "curl готов"
+    
+    # openssl (для генерации токенов) - в Entware называется libopenssl
+    if ! command -v openssl >/dev/null 2>&1; then
+        log_info "Установка openssl..."
+        # Пробуем разные варианты имён пакета
+        opkg install libopenssl 2>/dev/null || \
+        opkg install openssl-util 2>/dev/null || \
+        opkg install openssl 2>/dev/null || \
+        log_warn "openssl не установлен (токен будет сгенерирован альтернативным способом)"
+    fi
+    if command -v openssl >/dev/null 2>&1; then
+        log_success "openssl готов"
+    else
+        log_warn "openssl недоступен, использую альтернативную генерацию токена"
+    fi
+
+    # sing-box (основное VPN-ядро) - может отсутствовать в стандартном репозитории
     if command -v sing-box >/dev/null 2>&1; then
         log_success "sing-box уже установлен"
     else
         log_info "Установка sing-box..."
-        if opkg install sing-box; then
-            log_success "sing-box установлен"
-        else
-            log_warn "sing-box не установлен (опционально)"
-        fi
+        opkg install sing-box 2>/dev/null || \
+        log_info "sing-box отсутствует в репозитории. Установите вручную если нужно VPN."
     fi
     
-    # smartdns (лёгкий DNS-сервер)
-    if command -v smartdns >/dev/null 2>&1; then
-        log_success "smartdns уже установлен"
-    else
-        log_info "Установка smartdns..."
-        if opkg install smartdns; then
-            log_success "smartdns установлен"
-        else
-            log_warn "smartdns не установлен (опционально)"
-        fi
-    fi
-    
-    # ByeDPI (обход DPI)
+    # ByeDPI (обход DPI) - может отсутствовать
     if command -v byedpi >/dev/null 2>&1; then
         log_success "ByeDPI уже установлен"
     else
         log_info "Установка ByeDPI..."
-        if opkg install byedpi; then
-            log_success "ByeDPI установлен"
-        else
-            log_warn "ByeDPI не установлен (опционально)"
-        fi
+        opkg install byedpi 2>/dev/null || \
+        log_info "ByeDPI отсутствует в репозитории. Установите вручную если нужен обход DPI."
     fi
     
-    # curl (для внутренних запросов)
-    if ! command -v curl >/dev/null 2>&1; then
-        log_info "Установка curl..."
-        opkg install curl
-    fi
-    log_success "curl установлен"
-    
-    # openssl (для генерации токенов)
-    if ! command -v openssl >/dev/null 2>&1; then
-        log_info "Установка openssl..."
-        opkg install openssl
-    fi
-    log_success "openssl установлен"
+    log_success "Зависимости проверены"
 }
 
 # =============================================================================
