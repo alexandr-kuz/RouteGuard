@@ -23,7 +23,7 @@ rm -f /tmp/ps.zip
 # Download frontend
 echo "Downloading frontend..."
 curl -sL "https://github.com/$REPO/releases/download/v$VERSION/frontend.zip" -o /tmp/f.zip
-python3 -c "import zipfile; zipfile.ZipFile('/tmp/f.zip').extractall('$INSTALL_DIR')"
+python3 -c "import zipfile; zipfile.ZipFile('/tmp/f.zip').extractall('$INSTALL_DIR/')"
 rm -f /tmp/f.zip
 
 # Create launcher script
