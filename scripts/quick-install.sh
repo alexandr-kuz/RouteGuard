@@ -35,27 +35,47 @@ rm -f /tmp/f.zip
 cat > "/opt/bin/routeguard" << 'LAUNCHER'
 #!/bin/sh
 CONFIG="/opt/etc/routeguard/config.json"
+LOGFILE="/opt/var/log/routeguard/routeguard.log"
+
 # Порт из конфига или переменной окружения
 if [ -f "$CONFIG" ]; then
-    PORT=$(python3 -c "import json; print(json.load(open('$CONFIG')).get('api',{}).get('port',8080))" 2>/dev/null || echo "${RG_PORT:-8080}")
+    PORT=$(python3 -c "import json; print(json.load(open('$CONFIG')).get('api',{}).get('port',80))" 2>/dev/null || echo "${RG_PORT:-80}")
 else
-    PORT=${RG_PORT:-8080}
+    PORT=${RG_PORT:-80}
 fi
 
 case "$1" in
     start)
+        if pgrep -f "python3.*server.py" >/dev/null; then
+            echo "RouteGuard already running"
+            exit 0
+        fi
         echo "Starting RouteGuard on port $PORT..."
-        RG_PORT=$PORT nohup python3 /opt/etc/routeguard/server.py > /opt/var/log/routeguard/routeguard.log 2>&1 &
+        # Запуск без nohup (BusyBox совместимо)
+        python3 /opt/etc/routeguard/server.py > "$LOGFILE" 2>&1 &
         echo "Started (PID: $!)"
+        sleep 1
+        if pgrep -f "python3.*server.py" >/dev/null; then
+            echo "RouteGuard started successfully"
+        else
+            echo "Failed to start, check logs: $LOGFILE"
+        fi
         ;;
     stop)
         killall python3 2>/dev/null && echo "Stopped" || echo "Not running"
         ;;
     restart)
-        $0 stop; sleep 1; $0 start
+        $0 stop
+        sleep 1
+        $0 start
         ;;
     status)
-        pgrep -f "python3.*server.py" && echo "Running" || echo "Stopped"
+        if pgrep -f "python3.*server.py" >/dev/null; then
+            PID=$(pgrep -f "python3.*server.py")
+            echo "Running (PID: $PID)"
+        else
+            echo "Stopped"
+        fi
         ;;
     *)
         echo "Usage: routeguard {start|stop|restart|status}"
@@ -69,13 +89,8 @@ if [ ! -f "$INSTALL_DIR/config.json" ]; then
     TOKEN=$(python3 -c "import secrets; print(secrets.token_hex(32))")
     IP=$(hostname -i 2>/dev/null || echo "192.168.1.1")
     
-    # Проверка порта 8080 - если занят, использовать 80
-    if netstat -tlnp 2>/dev/null | grep -q ":8080 "; then
-        PORT=80
-        echo "[INFO] Port 8080 busy, using port 80"
-    else
-        PORT=8080
-    fi
+    # Порт по умолчанию 80 (для совместимости)
+    PORT=80
     
     cat > "$INSTALL_DIR/config.json" << EOF
 {
@@ -106,7 +121,7 @@ sleep 2
 
 # Summary
 TOKEN=$(cat "$INSTALL_DIR/.api_token" 2>/dev/null || echo "unknown")
-PORT=$(cat "$INSTALL_DIR/.port" 2>/dev/null || echo "8080")
+PORT=$(cat "$INSTALL_DIR/.port" 2>/dev/null || echo "80")
 IP=$(hostname -i 2>/dev/null || echo "192.168.1.1")
 
 # Формирование URL
