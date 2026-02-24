@@ -58,21 +58,30 @@ check_prerequisites() {
     # Проверка архитектуры
     ARCH=$(uname -m)
     case "$ARCH" in
-        mips|mipsel)
+        mips)
             TARGET="mips"
             ;;
-        armv7l|armv6l|aarch64)
+        mipsel)
+            TARGET="mipsle"
+            ;;
+        armv7l|armv6l)
             TARGET="arm"
             ;;
-        x86_64|amd64|i686)
+        aarch64|armv8l)
+            TARGET="arm64"
+            ;;
+        x86_64|amd64)
             TARGET="amd64"
             ;;
+        i686|i386)
+            TARGET="386"
+            ;;
         *)
-            log_error "Неподдерживаемая архитектура: $ARCH"
+            log_error "Unsupported architecture: $ARCH"
             exit 1
             ;;
     esac
-    log_success "Архитектура: $ARCH ($TARGET)"
+    log_success "Architecture: $ARCH ($TARGET)"
     
     # Проверка свободной памяти
     FREE_MEM=$(free -m 2>/dev/null | awk '/^Mem:/ {print $7}' || echo "100")
@@ -142,16 +151,20 @@ download_binaries() {
         exit 1
     fi
 
-    # Проверка ELF заголовка через head и hexdump (совместимо с BusyBox)
-    ELF_MAGIC=$(head -c 4 "$TMP_DIR/routeguard" | hexdump -v -n 4 -e '1/1 "%02x"')
-    if [ "$ELF_MAGIC" != "7f454c46" ]; then
-        log_error "Загружен не ELF файл! Возможна атака."
-        log_error "Magic bytes: $ELF_MAGIC (ожидалось 7f454c46)"
-        rm -rf "$TMP_DIR"
-        exit 1
+    # Проверка ELF заголовка (совместимо с BusyBox)
+    if command -v hexdump >/dev/null 2>&1; then
+        ELF_MAGIC=$(head -c 4 "$TMP_DIR/routeguard" | hexdump -v -n 4 -e '1/1 "%02x"')
+        if [ "$ELF_MAGIC" != "7f454c46" ]; then
+            log_error "Загружен не ELF файл! Возможна атака."
+            log_error "Magic bytes: $ELF_MAGIC (ожидалось 7f454c46)"
+            rm -rf "$TMP_DIR"
+            exit 1
+        fi
+        log_success "Проверка файла пройдена"
+    else
+        log_warn "hexdump не найден, пропускаю проверку ELF"
     fi
-    log_success "Проверка файла пройдена"
-
+    
     # Установка бинарника
     cp "$TMP_DIR/routeguard" "$BIN_DIR/"
     chmod +x "$BIN_DIR/routeguard"
@@ -257,24 +270,31 @@ create_directories() {
 generate_config() {
     log_step "Генерация конфигурации"
 
-    # Генерация API токена
-    API_TOKEN=$(openssl rand -hex 32)
+    # Генерация API токена (fallback если openssl недоступен)
+    if command -v openssl >/dev/null 2>&1; then
+        API_TOKEN=$(openssl rand -hex 32 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
+    else
+        API_TOKEN=$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
+    fi
 
     # Определение локального IP
-    LOCAL_IP=$(hostname -i 2>/dev/null || echo "192.168.1.1")
+    LOCAL_IP=$(hostname -i 2>/dev/null || ip route get 1 2>/dev/null | awk '{print $7; exit}' || echo "192.168.1.1")
+
+    # Timestamp (совместимо с BusyBox)
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
 
     # Создание config.json
-    cat > "$CONFIG_FILE" << 'EOF'
+    cat > "$CONFIG_FILE" << EOF
 {
     "version": "0.1.0",
-    "installed_at": "TIMESTAMP_PLACEHOLDER",
+    "installed_at": "$TIMESTAMP",
 
     "api": {
         "host": "0.0.0.0",
         "port": 8080,
-        "token": "TOKEN_PLACEHOLDER",
+        "token": "$API_TOKEN",
         "cors": true,
-        "allowed_origins": ["http://IP_PLACEHOLDER:8080"]
+        "allowed_origins": ["http://$LOCAL_IP:8080"]
     },
 
     "vpn": {
@@ -329,11 +349,6 @@ generate_config() {
 }
 EOF
 
-    # Замена плейсхолдеров
-    sed -i "s/TIMESTAMP_PLACEHOLDER/$(date -Iseconds)/" "$CONFIG_FILE"
-    sed -i "s/TOKEN_PLACEHOLDER/$API_TOKEN/" "$CONFIG_FILE"
-    sed -i "s/IP_PLACEHOLDER/$LOCAL_IP/" "$CONFIG_FILE"
-    
     # Сохранение токена в отдельный файл
     echo "$API_TOKEN" > "$INSTALL_DIR/.api_token"
     chmod 600 "$INSTALL_DIR/.api_token"
